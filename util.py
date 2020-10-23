@@ -200,3 +200,6 @@ def project(leadfield, y):
 
 def rms(x):
     return np.sqrt(np.mean(np.square(x)))
+
+def gaussian(x, mu, sig):
+    return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
