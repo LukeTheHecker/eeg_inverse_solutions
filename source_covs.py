@@ -1,10 +1,7 @@
 import numpy as np
 import scipy.ndimage as ndimage
 
-def mne_sourceCov(n_dip):
-    # sourceCov = np.zeros((n_dip, n_dip))
-    # np.fill_diagonal(sourceCov , 1)
-    return np.identity(n_dip)
+
 
 def loreta_sourceCov(n_dip, sigma=5):
     sourceCov = np.identity(n_dip)

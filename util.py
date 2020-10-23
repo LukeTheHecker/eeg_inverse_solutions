@@ -1,6 +1,7 @@
 import numpy as np
 from skimage.restoration import inpaint
 import mne
+from scipy.stats import pearsonr
 
 def get_events(onoff, annotations, srate, round_to, triglens, triglabels, mode='checkers'):
     ''' Extract Events from annotations using trigger lengths '''
@@ -203,3 +204,10 @@ def rms(x):
 
 def gaussian(x, mu, sig):
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
+def eval_estimate(y_true, y_pred):
+    error = np.mean(np.square(y_true-y_pred))
+    error_normed = np.mean(np.square(y_true/np.max(y_true)-y_pred/np.max(y_pred)))
+    corr = pearsonr(y_true, y_pred)[0]
+    print(f'error={error:.3f}({error_normed:.3f}), r={corr:.2f}')
+    return error, corr
