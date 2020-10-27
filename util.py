@@ -202,9 +202,38 @@ def project(leadfield, y):
 def rms(x):
     return np.sqrt(np.mean(np.square(x)))
 
-def eval_estimate(y_true, y_pred):
-    error = np.mean(np.square(y_true-y_pred))
-    error_normed = np.mean(np.square(y_true/np.max(y_true)-y_pred/np.max(y_pred)))
-    corr = pearsonr(y_true, y_pred)[0]
-    print(f'error={error:.3f}({error_normed:.3f}), r={corr:.2f}')
-    return error, corr
+
+
+# def auc(y_true, y_est):
+
+def get_adjacency_matrix(pos, tris):
+    adjMat = np.identity(pos.shape[0])
+
+    for i, conn in enumerate(tris):
+        adjMat[conn[0], conn[1]] = 1
+        adjMat[conn[1], conn[0]] = 1
+
+        adjMat[conn[0], conn[2]] = 1
+        adjMat[conn[2], conn[0]] = 1
+        
+        adjMat[conn[1], conn[2]] = 1
+        adjMat[conn[2], conn[1]] = 1
+
+    return adjMat
+
+def get_laplacian_adjacency_matrix(adjMat):
+    numberOfDipoles = adjMat.shape[0]
+    adjMat2 = np.zeros((numberOfDipoles, numberOfDipoles))
+    for i in range(numberOfDipoles):
+        adjMat2[i, i] = np.sum(adjMat[i, :])
+
+
+    return adjMat - adjMat2
+
+def get_W_sigma(adjMatLap, sigma, upperBound=8):
+    # W_sigma = np.exp(sigma * adjMatLap)
+    i = 0
+    W_sigma = (sigma**i / np.math.factorial(i)) * adjMatLap**i
+    for i in range(1, upperBound):
+        W_sigma += (sigma**i / np.math.factorial(i)) * adjMatLap**i
+    return W_sigma
