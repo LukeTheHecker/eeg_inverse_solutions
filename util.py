@@ -237,3 +237,8 @@ def get_W_sigma(adjMatLap, sigma, upperBound=8):
     for i in range(1, upperBound):
         W_sigma += (sigma**i / np.math.factorial(i)) * adjMatLap**i
     return W_sigma
+
+    
+def gaussian(x, mu, sig):
+    return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+

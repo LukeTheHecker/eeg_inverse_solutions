@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import auc
+from scipy.stats import pearsonr
 
 def auc_eval(y_true, y_est, plotme=False):
     
@@ -43,9 +44,9 @@ def auc_eval(y_true, y_est, plotme=False):
 
     return AUC
 
-def eval_estimate(y_true, y_est):
-    error = np.mean(np.square(y_true-y_est))
-    error_normed = np.mean(np.square(y_true/np.max(y_true)-y_est/np.max(y_est)))
-    corr = pearsonr(y_true, y_est)[0]
+def eval_estimate(y_true, y_pred):
+    error = np.mean(np.square(y_true-y_pred))
+    error_normed = np.mean(np.square(y_true/np.max(y_true)-y_pred/np.max(y_pred)))
+    corr = pearsonr(y_true, y_pred)[0]
     print(f'error={error:.3f}({error_normed:.3f}), r={corr:.2f}')
     return error, corr
