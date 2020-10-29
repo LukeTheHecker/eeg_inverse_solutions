@@ -44,6 +44,10 @@ stc, residual = mne.minimum_norm.apply_inverse(evoked, inv, 0.05,
 
 stc.save(pth_res+"\\ResSourceEstimate".format(), ftype='stc')
 
+mne.minimum_norm.write_inverse_operator(pth_res+"\\inverse-inv.fif",
+                       inv)
+tris = inv['src'][0]['use_tris']
+# inv.save(, ftype='fif')
         
 
 

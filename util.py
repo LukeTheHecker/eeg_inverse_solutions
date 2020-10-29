@@ -202,6 +202,43 @@ def project(leadfield, y):
 def rms(x):
     return np.sqrt(np.mean(np.square(x)))
 
+
+
+# def auc(y_true, y_est):
+
+def get_adjacency_matrix(pos, tris):
+    adjMat = np.identity(pos.shape[0])
+
+    for i, conn in enumerate(tris):
+        adjMat[conn[0], conn[1]] = 1
+        adjMat[conn[1], conn[0]] = 1
+
+        adjMat[conn[0], conn[2]] = 1
+        adjMat[conn[2], conn[0]] = 1
+        
+        adjMat[conn[1], conn[2]] = 1
+        adjMat[conn[2], conn[1]] = 1
+
+    return adjMat
+
+def get_laplacian_adjacency_matrix(adjMat):
+    numberOfDipoles = adjMat.shape[0]
+    adjMat2 = np.zeros((numberOfDipoles, numberOfDipoles))
+    for i in range(numberOfDipoles):
+        adjMat2[i, i] = np.sum(adjMat[i, :])
+
+
+    return adjMat - adjMat2
+
+def get_W_sigma(adjMatLap, sigma, upperBound=8):
+    # W_sigma = np.exp(sigma * adjMatLap)
+    i = 0
+    W_sigma = (sigma**i / np.math.factorial(i)) * adjMatLap**i
+    for i in range(1, upperBound):
+        W_sigma += (sigma**i / np.math.factorial(i)) * adjMatLap**i
+    return W_sigma
+
+    
 def gaussian(x, mu, sig):
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
@@ -216,3 +253,37 @@ def centeringMatrix(n):
     ''' Centering matrix, which when multiplied with a vector subtract the mean of the vector.'''
     C = np.identity(n) - (1/n) * np.ones((n, n))
     return C
+def find_indices_close_to_source(simSettings, pos):
+    ''' Finds the dipole indices that are closest to the active sources. 
+    Parameters:
+    -----------
+    simSettings : dict, retrieved from the simulate_source function
+    pos : numpy.ndarray, list of all dipole positions in XYZ coordinates
+
+    Return:
+    -------
+    ordered_indices : numpy.ndarray, ordered list of dipoles that are near active sources in ascending order with respect to their distance to         the next source.'''
+    numberOfDipoles = pos.shape[0]
+    pos_indices = np.arange(numberOfDipoles)
+    src_center_indices = simSettings['scr_center_indices']
+    numberOfSources = len(src_center_indices)
+    amplitudes = simSettings['amplitudes']
+    diamters = simSettings['diameters']
+    sourceMask = simSettings['sourceMask']
+    sourceIndices = np.array([i[0] for i in np.argwhere(sourceMask==1)])
+    numberOfNans = 0
+    min_distance_to_source = np.zeros((numberOfDipoles))
+    for i in range(numberOfDipoles):
+        if sourceMask[i] == 1:
+            min_distance_to_source[i] = np.nan
+            numberOfNans +=1
+        elif sourceMask[i] == 0:
+            distances = np.sqrt(np.sum((pos[sourceIndices, :] - pos[i, :])**2, axis=1))
+            min_distance_to_source[i] = np.min(distances)
+        else:
+            print('source mask has invalid entries')
+    
+    # min_distance_to_source = min_distance_to_source[~np.isnan(min_distance_to_source)]
+    ordered_indices = np.argsort(min_distance_to_source)
+    # ordered_indices[np.where(~np.isnan(min_distance_to_source[ordered_indices]]
+    return ordered_indices[:-numberOfNans]
