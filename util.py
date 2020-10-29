@@ -211,3 +211,8 @@ def eval_estimate(y_true, y_pred):
     corr = pearsonr(y_true, y_pred)[0]
     print(f'error={error:.3f}({error_normed:.3f}), r={corr:.2f}')
     return error, corr
+
+def centeringMatrix(n):
+    ''' Centering matrix, which when multiplied with a vector subtract the mean of the vector.'''
+    C = np.identity(n) - (1/n) * np.ones((n, n))
+    return C
