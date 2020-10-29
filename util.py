@@ -242,3 +242,37 @@ def get_W_sigma(adjMatLap, sigma, upperBound=8):
 def gaussian(x, mu, sig):
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
+def find_indices_close_to_source(simSettings, pos):
+    ''' Finds the dipole indices that are closest to the active sources. 
+    Parameters:
+    -----------
+    simSettings : dict, retrieved from the simulate_source function
+    pos : numpy.ndarray, list of all dipole positions in XYZ coordinates
+
+    Return:
+    -------
+    ordered_indices : numpy.ndarray, ordered list of dipoles that are near active sources in ascending order with respect to their distance to         the next source.'''
+    numberOfDipoles = pos.shape[0]
+    pos_indices = np.arange(numberOfDipoles)
+    src_center_indices = simSettings['scr_center_indices']
+    numberOfSources = len(src_center_indices)
+    amplitudes = simSettings['amplitudes']
+    diamters = simSettings['diameters']
+    sourceMask = simSettings['sourceMask']
+    sourceIndices = np.array([i[0] for i in np.argwhere(sourceMask==1)])
+    numberOfNans = 0
+    min_distance_to_source = np.zeros((numberOfDipoles))
+    for i in range(numberOfDipoles):
+        if sourceMask[i] == 1:
+            min_distance_to_source[i] = np.nan
+            numberOfNans +=1
+        elif sourceMask[i] == 0:
+            distances = np.sqrt(np.sum((pos[sourceIndices, :] - pos[i, :])**2, axis=1))
+            min_distance_to_source[i] = np.min(distances)
+        else:
+            print('source mask has invalid entries')
+    
+    # min_distance_to_source = min_distance_to_source[~np.isnan(min_distance_to_source)]
+    ordered_indices = np.argsort(min_distance_to_source)
+    # ordered_indices[np.where(~np.isnan(min_distance_to_source[ordered_indices]]
+    return ordered_indices[:-numberOfNans]
