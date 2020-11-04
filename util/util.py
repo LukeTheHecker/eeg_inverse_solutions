@@ -1,7 +1,14 @@
+from mne.cov import regularize
 import numpy as np
 from skimage.restoration import inpaint
 import mne
 from scipy.stats import pearsonr
+import pickle as pkl
+import os
+import matplotlib.pyplot as plt
+from scipy.io import savemat
+
+import sim
 
 def get_events(onoff, annotations, srate, round_to, triglens, triglabels, mode='checkers'):
     ''' Extract Events from annotations using trigger lengths '''
@@ -124,7 +131,7 @@ def create_source_model(subject, subjects_dir, pth, res='low'):
 
     src = mne.setup_source_space(subject, spacing=spacing, surface='white',
                                       subjects_dir=subjects_dir, add_dist=False,
-                                      n_jobs=4, verbose=None)
+                                      n_jobs=-1, verbose=None)
     # src.plot()
 
     src.save('{}\\{}Res-src.fif'.format(pth,res), overwrite=True)
@@ -203,9 +210,6 @@ def rms(x):
     return np.sqrt(np.mean(np.square(x)))
 
 
-
-# def auc(y_true, y_est):
-
 def get_adjacency_matrix(pos, tris):
     adjMat = np.identity(pos.shape[0])
 
@@ -253,6 +257,7 @@ def centeringMatrix(n):
     ''' Centering matrix, which when multiplied with a vector subtract the mean of the vector.'''
     C = np.identity(n) - (1/n) * np.ones((n, n))
     return C
+
 def find_indices_close_to_source(simSettings, pos):
     ''' Finds the dipole indices that are closest to the active sources. 
     Parameters:
@@ -287,3 +292,174 @@ def find_indices_close_to_source(simSettings, pos):
     ordered_indices = np.argsort(min_distance_to_source)
     # ordered_indices[np.where(~np.isnan(min_distance_to_source[ordered_indices]]
     return ordered_indices[:-numberOfNans]
+
+def sens_spec(y, y_hat):
+    nTruePositives = len(np.where(np.logical_and(y == 1, y_hat == 1))[0])
+    nTrueNegatives = len(np.where(np.logical_and(y == 0, y_hat == 0))[0])
+    nFalsePositives = len(np.where(np.logical_and(y == 0, y_hat == 1))[0])
+    nFalseNegatives = len(np.where(np.logical_and(y == 1, y_hat == 0))[0])
+    
+    # print(f'nTruePositives={nTruePositives}')
+    try:
+        sensitivity = nTruePositives / (nTruePositives + nFalseNegatives)
+    except ZeroDivisionError:
+        sensitivity = 0
+
+    try:
+        specificity = nTrueNegatives / (nTrueNegatives + nFalsePositives)
+    except ZeroDivisionError:
+        specificity = 0
+
+    return sensitivity, specificity
+
+def add_noise(x, snr):
+    rms_x = rms(x)
+    rms_noise = rms_x / snr
+    noise = np.random.randn(len(x)) * rms_noise
+    return x + noise
+
+def get_pulse(x):
+    ''' Returns a pulse of length x'''
+    sr = 1
+    freq = (1/x) / 2
+    time = np.arange(x)
+
+    signal = np.sin(2*np.pi*freq*time)
+    return signal
+
+def repeat_newcol(x, n):
+    ''' Repeat a list/numpy.ndarray x in n columns.'''
+    out = np.zeros((len(x), n))
+    for i in range(n):
+        out[:,  i] = x
+    return np.squeeze(out)
+
+
+def get_chan_pos_list(info, montage_type='standard_1020'):
+    ''' Returns a list of channel names + respective position in 
+    the same order as they occur in the info structure'''
+    if type(montage_type) == str:
+        montage = mne.channels.make_standard_montage(montage_type)
+    else:
+        montage = montage_type
+    n_chan = len(montage.ch_names)
+    chan_assign = {}
+    for i in range(3, n_chan+3):
+        chan_assign[montage.dig[i]['ident']] = montage.ch_names[i-3]
+    # print(chan_assign)
+    ###
+    chan_list = [list() for i in range(len(info.ch_names))]
+
+    for i in range(3, len(info['dig'])):
+        current_identitiy = info['dig'][i]['ident']
+        # print(f'Current Identitiy: {current_identitiy}')
+        chan_list[i-3].append(chan_assign[current_identitiy])
+        # print(f'Channel name: {chan_assign[current_identitiy]}')
+        chan_list[i-3].append(info['dig'][i]['r'])
+        pos = info['dig'][i]['r']
+        # print(f'Channel position: {pos}\n')
+
+    chan_list_ordererd = chan_list.copy()
+    # Loop through channel names in raw data
+    for j, chan in enumerate(info['ch_names']):
+        # Find the correct row in chan_list
+        for row in chan_list:
+            if row[0] == chan:
+                # And copy that row to the correctly ordered list
+                chan_list_ordererd[j] = row
+    # print(chan_list_ordererd)
+    return np.array(chan_list_ordererd)
+
+def create_noise_segments(path, numberOfTrials, durOfTrial, sampleFreq, filtfreqs):
+    # from sim import get_actual_noise
+    # path_store = os.path.dirname(path)
+    fn = f'{path}/noise_dur{durOfTrial}_sf{sampleFreq}_filt{filtfreqs}.pkl'
+    trials = sim.get_actual_noise(path, numberOfTrials, durOfTrial, sampleFreq=sampleFreq, 
+            filtfreqs=filtfreqs)
+    print(f'saving trials..')
+
+    plt.figure()
+    plt.plot(np.mean(trials, axis=0).T)
+    plt.title('noise trials')
+
+
+    with open(fn, 'wb') as f:
+        pkl.dump(trials, f)
+
+def get_noise_trials(settings):
+    path = settings["path"]
+    durOfTrial = settings["durOfTrial"]
+    sampleFreq = settings["sampleFreq"]
+    filtfreqs = settings["filtfreqs"]
+
+    fn = f'{path}/noise_dur{durOfTrial}_sf{sampleFreq}_filt{filtfreqs}.pkl'
+    if not os.path.isfile(fn):
+            print('No noise trials for these settings found! Creating some..')
+            noise_trials = create_noise_segments(path, 200, durOfTrial, sampleFreq, filtfreqs)
+
+    with open(fn, 'rb') as f:
+        noise_trials = pkl.load(f)
+    return noise_trials
+
+def data_to_mne(eegData, settings, info, scalingFactor=1e6):
+    info = mne.create_info(info.ch_names, settings['sampleFreq'], ch_types='eeg')
+    epochs = [mne.EpochsArray(data*scalingFactor, info, tmin=0.0, verbose=0) for data in eegData]
+
+    for epoch in epochs:
+        epoch.set_eeg_reference(ref_channels='average', verbose=0)
+        epoch.set_montage('standard_1020')
+
+
+    
+    evokeds = [epoch.average() for epoch in epochs]
+
+    for evoked in evokeds:
+        evoked.set_eeg_reference(ref_channels='average', verbose=0, projection=True)
+        evoked.set_montage('standard_1020')
+    return epochs, evokeds
+
+def get_covariances(epochs, noise_baseline, regularize=True):
+    if regularize:
+        noiseCovariances = [mne.cov.regularize(mne.compute_covariance(epoch, tmin=noise_baseline[0], tmax=noise_baseline[1], method='empirical', verbose=0, n_jobs=-1), \
+            epoch.info, rank=None, verbose=0) for epoch in epochs]
+        dataCovariances = [mne.cov.regularize(mne.compute_covariance(epoch, method='empirical', verbose=0, n_jobs=-1), \
+            epoch.info, rank=None, verbose=0) for epoch in epochs]    
+    else:
+        noiseCovariances = [mne.compute_covariance(epoch, tmin=noise_baseline[0], tmax=noise_baseline[1], method='empirical', verbose=0, n_jobs=-1) for epoch in epochs]
+        dataCovariances = [mne.compute_covariance(epoch, method='empirical', verbose=0, n_jobs=-1) for epoch in epochs]
+
+    return noiseCovariances, dataCovariances
+
+def brainstorm_to_mne_space(y_bst, neighborMatrix=None):
+    if neighborMatrix is None:
+        fn = 'C:/Users/Lukas/Documents/projects/eeg_inverse_solutions/assets/neighborMatrix.pkl'
+
+        with open(fn, 'rb') as f:
+            neighborMatrix = pkl.load(f)
+
+    numberOfDipoles = len(neighborMatrix)
+    y_est = np.zeros((numberOfDipoles))
+    for i in range(numberOfDipoles):
+        y_est[i] = np.mean(y_bst[neighborMatrix[i]])
+    return y_est
+
+def epochs_covs_to_fif(epochs, dataCovariances, noiseCovariances, pth_dest):
+    
+    for i, epoch in enumerate(epochs):
+        if np.mod(i, 100) == 0:
+            print(f'saved {i} epochs')
+        savemat(pth_dest + 'sim_' + str(i) + '.mat', dict(data=epoch.average()._data))
+        # epoch.average().save(pth_dest + 'sim_' + str(i) + '-epo.fif')
+        dataCovariances[i].save(pth_dest + 'dataCov_' + str(i) + '-cov.fif')
+        noiseCovariances[i].save(pth_dest + 'noiseCov_' + str(i) + '-cov.fif')
+
+    print(f'\tdone.')
+
+def dipoles_to_stc(stc, numberOfDipoles, numberOfTimepoints):
+    dipolesPerHemisphere = (len(stc.vertices[0]), len(stc.vertices[1]))
+    y_est = np.zeros((numberOfDipoles, numberOfTimepoints))
+    if dipolesPerHemisphere[0] != 0:
+        y_est[stc.vertices[0], :] = stc.data[0:dipolesPerHemisphere[0], :]
+    if dipolesPerHemisphere[1] != 0:
+        y_est[stc.vertices[1], :] = stc.data[-dipolesPerHemisphere[1]:, :]
+    return y_est

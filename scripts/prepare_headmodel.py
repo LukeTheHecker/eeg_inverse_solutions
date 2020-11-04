@@ -14,7 +14,7 @@ src = os.path.join(fs_dir, 'bem', 'fsaverage-ico-5-src.fif')
 bem = os.path.join(fs_dir, 'bem', 'fsaverage-5120-5120-5120-bem-sol.fif')
 
 pth_res = 'assets/'
-pth = 'assets/CL_GC_01.vhdr'
+pth = 'assets/raw_data/CL_KA_01.vhdr'
 raw, epochs, evoked = get_raw_data(pth)
 raw.set_eeg_reference(projection=True)  # needed for inverse modeling
 
@@ -68,3 +68,7 @@ pos = np.concatenate([pos_left, pos_right], axis=0)
 fn = "{}\\pos.pkl".format(pth_res)
 with open(fn, 'wb') as f:
     pkl.dump([pos], f)
+
+fn =f'{pth_res}/info.pkl'
+with open(fn, 'wb') as f:
+    pkl.dump(raw.info, f)

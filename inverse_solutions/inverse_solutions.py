@@ -4,6 +4,7 @@ from copy import deepcopy
 from scipy.stats import pearsonr
 from source_covs import *
 from util import *
+from mne.inverse_sparse import gamma_map
 
 def exhaustive_dipole_search(x, leadfield, pos):
     y = np.zeros((pos.shape[0]))
@@ -155,3 +156,75 @@ def calc_eloreta_D(leadfield, tikhonov, stopCrit=0.005):
         cnt += 1
     print('\t...done!')
     return D, C
+
+def mne_elor(evoked, fwd, noiseCovariance, return_idx=50):
+    inv = mne.minimum_norm.make_inverse_operator(evoked.info, fwd, noiseCovariance, fixed=True, verbose=False)
+    stc = np.abs(mne.minimum_norm.apply_inverse(evoked, inv, method='eLORETA', verbose=False))
+    y_eloreta = stc.data[:, return_idx]
+    return y_eloreta
+
+def mne_mne(evoked, fwd, noiseCovariance, return_idx=50):
+    inv = mne.minimum_norm.make_inverse_operator(evoked.info, fwd, noiseCovariance, fixed=True, verbose=False)
+    stc = np.abs(mne.minimum_norm.apply_inverse(evoked, inv, method='MNE', verbose=False))
+    y_eloreta = stc.data[:, return_idx]
+    return y_eloreta
+
+def mne_lcmv(evoked, fwd, noiseCovariance, dataCovariance, return_idx=50):
+ 
+    filters = mne.beamformer.make_lcmv(evoked.info, fwd, dataCovariance, \
+                reg=0.05, noise_cov=noiseCovariance, weight_norm='nai', \
+                verbose=0)
+                
+    stc = mne.beamformer.apply_lcmv(evoked, filters, verbose=0)
+    y_lcmv = stc.data[:, return_idx]
+    return y_lcmv
+
+def mne_gamma_map(evoked, fwd, noiseCovariance, return_idx=50, alpha=1e-3):
+
+    numberOfDipoles = int(fwd['sol']['data'].shape[1] / 3)
+    numberOfTimepoints = evoked._data.shape[1]
+    
+    evoked.set_eeg_reference('average', projection=True)
+    
+    stc = gamma_map(
+        evoked, fwd, noiseCovariance, alpha, xyz_same_gamma=False, loose=0, return_residual=False,
+        return_as_dipoles=False, verbose=0)
+        
+    y_est = dipoles_to_stc(stc, numberOfDipoles, numberOfTimepoints)
+
+    return y_est[:, return_idx]
+
+def mne_mxne(evoked, fwd, noiseCovariance, return_idx=50, alpha=40., l1_ratio=0.03, depth=0.9, \
+        weights_min=8):
+
+    inverse_operator = mne.minimum_norm.make_inverse_operator(evoked.info, \
+        fwd, noiseCovariance, loose=0, depth=depth, verbose=0)
+
+    stc_elor = mne.minimum_norm.apply_inverse(evoked, inverse_operator, lambda2=1. / 9., \
+        method='dSPM', verbose=0)
+    
+    numberOfDipoles = int(fwd['sol']['data'].shape[1] / 3)
+    numberOfTimepoints = evoked._data.shape[1]
+
+    # try:
+    while True:
+        try:
+            stc = mne.inverse_sparse.tf_mixed_norm( \
+                evoked, fwd, noiseCovariance, alpha=alpha, l1_ratio=l1_ratio, loose=0,
+                depth=depth, maxit=200, tol=1e-6, weights=stc_elor, weights_min=weights_min,
+                debias=True, wsize=16, tstep=4, window=0.05, return_as_dipoles=False,
+                return_residual=False, verbose=0)
+            y_est = dipoles_to_stc(stc, numberOfDipoles, numberOfTimepoints)
+            y_est = np.nan_to_num(y_est[:, return_idx])
+            if np.max(y_est) == 0:
+                print(f'max source is zero, decreasing alpha to {int(round(alpha*0.9))}')
+                alpha = int(round(alpha*0.9))
+                continue
+            else:
+                break
+        except:
+            print(f'reducing weights to {weights_min/2}')
+            weights_min /= 2
+            continue
+            
+    return y_est

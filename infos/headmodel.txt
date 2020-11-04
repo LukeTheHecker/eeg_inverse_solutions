@@ -1,0 +1,20 @@
+Infos on the forward model:
+
+%%%%%%%%%%%%%%%%%%%%%%
+what is already same:
+
+Conductivity:
+Brain: 0.3
+Skull: 0.006
+Scalp: 0.3
+
+Number of vertices in BEM:
+all 3 layers (scalp, outer skull, inner skull): 2562
+
+%%%%%%%%%%%%%%%%%%%%%%%%%
+what needs to be checked:
+
+- skull thickness: 4mm in brainstorm
+- coordinate frame conversion
+	- can convert brainstorm format to MNI
+
